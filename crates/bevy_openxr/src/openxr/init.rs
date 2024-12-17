@@ -113,7 +113,7 @@ impl Plugin for OxrInitPlugin {
                         (
                             create_xr_session
                                 .run_if(state_equals(XrState::Available))
-                                .run_if(on_event::<XrCreateSessionEvent>()),
+                                .run_if(on_event::<XrCreateSessionEvent>),
                             (
                                 destroy_xr_session,
                                 (|v: Res<XrDestroySessionRender>| {
@@ -122,16 +122,16 @@ impl Plugin for OxrInitPlugin {
                                 }),
                             )
                                 .run_if(state_matches!(XrState::Exiting { .. }))
-                                .run_if(on_event::<XrDestroySessionEvent>()),
+                                .run_if(on_event::<XrDestroySessionEvent>),
                             begin_xr_session
                                 .run_if(state_equals(XrState::Ready))
-                                .run_if(on_event::<XrBeginSessionEvent>()),
+                                .run_if(on_event::<XrBeginSessionEvent>),
                             end_xr_session
                                 .run_if(state_equals(XrState::Stopping))
-                                .run_if(on_event::<XrEndSessionEvent>()),
+                                .run_if(on_event::<XrEndSessionEvent>),
                             request_exit_xr_session
                                 .run_if(session_created)
-                                .run_if(on_event::<XrRequestExitEvent>()),
+                                .run_if(on_event::<XrRequestExitEvent>),
                         )
                             .in_set(XrHandleEvents::SessionStateUpdateEvents),
                     )

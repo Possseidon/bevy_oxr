@@ -15,8 +15,8 @@ fn draw_hand_gizmos(
     query: Query<(&GlobalTransform, &HandBone, &HandBoneRadius)>,
 ) {
     for (transform, bone, radius) in &query {
-        let pose = transform.compute_transform();
-        gizmos.sphere(pose.translation, pose.rotation, **radius, gizmo_color(bone));
+        let isometry = transform.compute_transform().to_isometry();
+        gizmos.sphere(isometry, **radius, gizmo_color(bone));
     }
 }
 

@@ -1,8 +1,9 @@
 use bevy::log::error;
 use openxr::sys;
 use wgpu_hal::{Adapter, Instance};
-use winapi::shared::dxgiformat::DXGI_FORMAT;
-use winapi::um::d3d12 as winapi_d3d12;
+use windows::core::Interface;
+use windows::Win32::Graphics::Direct3D12::{ID3D12Device, ID3D12Resource, D3D12_FEATURE_DATA_FEATURE_LEVELS, D3D12_FEATURE_FEATURE_LEVELS};
+use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT;
 
 use super::{GraphicsExt, GraphicsType, GraphicsWrap};
 use crate::error::OxrError;
@@ -21,11 +22,11 @@ unsafe impl GraphicsExt for openxr::D3D12 {
     }
 
     fn from_wgpu_format(format: wgpu::TextureFormat) -> Option<Self::Format> {
-        wgpu_to_d3d12(format)
+        wgpu_to_d3d12(format).map(|format| format.0 as Self::Format)
     }
 
     fn into_wgpu_format(format: Self::Format) -> Option<wgpu::TextureFormat> {
-        d3d12_to_wgpu(format)
+        d3d12_to_wgpu(DXGI_FORMAT(format as i32))
     }
 
     unsafe fn to_wgpu_img(
@@ -35,7 +36,7 @@ unsafe impl GraphicsExt for openxr::D3D12 {
         resolution: bevy::prelude::UVec2,
     ) -> Result<wgpu::Texture> {
         let wgpu_hal_texture = <wgpu_hal::dx12::Api as wgpu_hal::Api>::Device::texture_from_raw(
-            d3d12::ComPtr::from_raw(image as *mut _),
+            ID3D12Resource::from_raw(image),
             format,
             wgpu::TextureDimension::D2,
             wgpu::Extent3d {
@@ -87,13 +88,12 @@ unsafe impl GraphicsExt for openxr::D3D12 {
         let wgpu_raw_instance: wgpu_hal::dx12::Instance =
             unsafe { wgpu_hal::dx12::Instance::init(instance_descriptor)? };
         let wgpu_adapters: Vec<wgpu_hal::ExposedAdapter<wgpu_hal::dx12::Api>> =
-            unsafe { wgpu_raw_instance.enumerate_adapters() };
+            unsafe { wgpu_raw_instance.enumerate_adapters(None) };
 
         let wgpu_exposed_adapter = wgpu_adapters
             .into_iter()
             .find(|a| {
-                let mut desc = unsafe { std::mem::zeroed() };
-                unsafe { a.adapter.raw_adapter().GetDesc1(&mut desc) };
+                let desc = unsafe { a.adapter.raw_adapter().GetDesc1() }.unwrap();
                 desc.AdapterLuid.HighPart == reqs.adapter_luid.HighPart
                     && desc.AdapterLuid.LowPart == reqs.adapter_luid.LowPart
             })
@@ -114,7 +114,7 @@ unsafe impl GraphicsExt for openxr::D3D12 {
         let wgpu_open_device = unsafe {
             wgpu_exposed_adapter
                 .adapter
-                .open(wgpu_features, &wgpu_limits)?
+                .open(wgpu_features, &wgpu_limits, &wgpu::MemoryHints::default())?
         };
 
         let device_supported_feature_level: d3d12::FeatureLevel =
@@ -129,8 +129,8 @@ unsafe impl GraphicsExt for openxr::D3D12 {
         }
 
         let wgpu_adapter = unsafe { wgpu_instance.create_adapter_from_hal(wgpu_exposed_adapter) };
-        let raw_device = wgpu_open_device.device.raw_device().as_mut_ptr();
-        let raw_queue = wgpu_open_device.device.raw_queue().as_mut_ptr();
+        let raw_device = wgpu_open_device.device.raw_device().as_raw();
+        let raw_queue = wgpu_open_device.device.raw_queue().as_raw();
         let (wgpu_device, wgpu_queue) = unsafe {
             wgpu_adapter.create_device_from_hal(
                 wgpu_open_device,
@@ -138,6 +138,7 @@ unsafe impl GraphicsExt for openxr::D3D12 {
                     label: Some("bevy_oxr device"),
                     required_features: wgpu_features,
                     required_limits: wgpu_limits,
+                    memory_hints: wgpu::MemoryHints::default(),
                 },
                 None,
             )?
@@ -152,8 +153,8 @@ unsafe impl GraphicsExt for openxr::D3D12 {
                 wgpu_instance,
             ),
             Self::SessionCreateInfo {
-                device: raw_device.cast(),
-                queue: raw_queue.cast(),
+                device: raw_device,
+                queue: raw_queue,
             },
         ))
     }
@@ -205,7 +206,7 @@ fn cvt(x: sys::Result) -> openxr::Result<sys::Result> {
 // Extracted from https://github.com/gfx-rs/wgpu/blob/1161a22f4fbb4fc204eb06f2ac4243f83e0e980d/wgpu-hal/src/dx12/adapter.rs#L73-L94
 // license: MIT OR Apache-2.0
 fn get_device_feature_level(
-    device: &d3d12::ComPtr<winapi_d3d12::ID3D12Device>,
+    device: &ID3D12Device,
 ) -> d3d12::FeatureLevel {
     // Detect the highest supported feature level.
     let d3d_feature_level = [
@@ -214,26 +215,25 @@ fn get_device_feature_level(
         d3d12::FeatureLevel::L11_1,
         d3d12::FeatureLevel::L11_0,
     ];
-    type FeatureLevelsInfo = winapi_d3d12::D3D12_FEATURE_DATA_FEATURE_LEVELS;
+    type FeatureLevelsInfo = D3D12_FEATURE_DATA_FEATURE_LEVELS;
     let mut device_levels: FeatureLevelsInfo = unsafe { std::mem::zeroed() };
     device_levels.NumFeatureLevels = d3d_feature_level.len() as u32;
     device_levels.pFeatureLevelsRequested = d3d_feature_level.as_ptr().cast();
     unsafe {
         device.CheckFeatureSupport(
-            winapi_d3d12::D3D12_FEATURE_FEATURE_LEVELS,
+            D3D12_FEATURE_FEATURE_LEVELS,
             (&mut device_levels as *mut FeatureLevelsInfo).cast(),
             std::mem::size_of::<FeatureLevelsInfo>() as _,
         )
     };
     // This cast should never fail because we only requested feature levels that are already in the enum.
-    let max_feature_level = d3d12::FeatureLevel::try_from(device_levels.MaxSupportedFeatureLevel)
+    let max_feature_level = d3d12::FeatureLevel::try_from(device_levels.MaxSupportedFeatureLevel.0 as u32)
         .expect("Unexpected feature level");
     max_feature_level
 }
 
 fn d3d12_to_wgpu(format: DXGI_FORMAT) -> Option<wgpu::TextureFormat> {
     use wgpu::TextureFormat as Tf;
-    use winapi::shared::dxgiformat::*;
 
     Some(match format {
         DXGI_FORMAT_R8_UNORM => Tf::R8Unorm,
@@ -267,7 +267,7 @@ fn d3d12_to_wgpu(format: DXGI_FORMAT) -> Option<wgpu::TextureFormat> {
         DXGI_FORMAT_R9G9B9E5_SHAREDEXP => Tf::Rgb9e5Ufloat,
         DXGI_FORMAT_R10G10B10A2_UINT => Tf::Rgb10a2Uint,
         DXGI_FORMAT_R10G10B10A2_UNORM => Tf::Rgb10a2Unorm,
-        DXGI_FORMAT_R11G11B10_FLOAT => Tf::Rg11b10Float,
+        DXGI_FORMAT_R11G11B10_FLOAT => Tf::Rg11b10Ufloat,
         DXGI_FORMAT_R32G32_UINT => Tf::Rg32Uint,
         DXGI_FORMAT_R32G32_SINT => Tf::Rg32Sint,
         DXGI_FORMAT_R32G32_FLOAT => Tf::Rg32Float,
@@ -307,7 +307,8 @@ fn wgpu_to_d3d12(format: wgpu::TextureFormat) -> Option<DXGI_FORMAT> {
     // https://github.com/gfx-rs/wgpu/blob/v0.19/wgpu-hal/src/auxil/dxgi/conv.rs#L12-L94
     // license: MIT OR Apache-2.0
     use wgpu::TextureFormat as Tf;
-    use winapi::shared::dxgiformat::*;
+    // use winapi::shared::dxgiformat::*;
+    use windows::Win32::Graphics::Dxgi::Common::*;
 
     Some(match format {
         Tf::R8Unorm => DXGI_FORMAT_R8_UNORM,
@@ -341,7 +342,7 @@ fn wgpu_to_d3d12(format: wgpu::TextureFormat) -> Option<DXGI_FORMAT> {
         Tf::Rgb9e5Ufloat => DXGI_FORMAT_R9G9B9E5_SHAREDEXP,
         Tf::Rgb10a2Uint => DXGI_FORMAT_R10G10B10A2_UINT,
         Tf::Rgb10a2Unorm => DXGI_FORMAT_R10G10B10A2_UNORM,
-        Tf::Rg11b10Float => DXGI_FORMAT_R11G11B10_FLOAT,
+        Tf::Rg11b10Ufloat => DXGI_FORMAT_R11G11B10_FLOAT,
         Tf::Rg32Uint => DXGI_FORMAT_R32G32_UINT,
         Tf::Rg32Sint => DXGI_FORMAT_R32G32_SINT,
         Tf::Rg32Float => DXGI_FORMAT_R32G32_FLOAT,

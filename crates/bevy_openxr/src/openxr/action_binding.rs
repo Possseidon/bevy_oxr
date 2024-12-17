@@ -16,7 +16,7 @@ impl Plugin for OxrActionBindingPlugin {
         app.add_event::<OxrSuggestActionBinding>();
         app.add_systems(
             Update,
-            run_action_binding_sugestion.run_if(on_event::<XrSessionCreatedEvent>()),
+            run_action_binding_sugestion.run_if(on_event::<XrSessionCreatedEvent>),
         );
     }
 }

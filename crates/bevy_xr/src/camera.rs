@@ -99,6 +99,10 @@ impl CameraProjection for XrProjection {
     fn get_clip_from_view(&self) -> Mat4 {
         self.projection_matrix
     }
+
+    fn get_clip_from_view_for_sub(&self, _sub_view: &bevy::render::camera::SubCameraView) -> Mat4 {
+        todo!()
+    }
 }
 
 #[derive(Bundle)]

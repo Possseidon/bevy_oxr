@@ -235,7 +235,7 @@ fn spawn_tracking_rig(
         .id();
 
     cmds.entity(root.single())
-        .push_children(&[head, left, right]);
+        .add_children(&[head, left, right]);
 }
 
 //bindings

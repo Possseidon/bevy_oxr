@@ -10,7 +10,7 @@ keywords = ["gamedev", "bevy", "Xr", "Vr", "OpenXR"]
 [features]
 default = ["vulkan", "d3d12", "passthrough"]
 vulkan = ["dep:ash"]
-d3d12 = ["wgpu/dx12", "wgpu-hal/dx12", "dep:winapi", "dep:d3d12"]
+d3d12 = ["wgpu/dx12", "wgpu-hal/dx12", "dep:windows", "dep:d3d12"]
 passthrough = []
 
 [dev-dependencies]
@@ -29,11 +29,11 @@ bevy.workspace = true
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 openxr = "0.18.0"
 thiserror = "1.0.57"
-wgpu = "0.20"
-wgpu-hal = "0.21"
+wgpu = "23.0.1"
+wgpu-hal = "23.0.1"
 bevy_mod_xr = { path = "../bevy_xr", version = "0.1.0" }
 
-ash = { version = "0.37.3", optional = true }
+ash = { version = "0.38.0", optional = true }
 
 [target.'cfg(target_family = "unix")'.dependencies]
 openxr = { version = "0.18.0", features = ["mint"] }
@@ -41,7 +41,7 @@ wgpu = { version = "0.20", features = ["vulkan-portability"] }
 
 [target.'cfg(target_family = "windows")'.dependencies]
 openxr = { version = "0.18.0", features = ["mint", "static"] }
-winapi = { version = "0.3.9", optional = true }
+windows = { version = "0.58.0", optional = true }
 d3d12 = { version = "0.20", features = ["libloading"], optional = true }
 
 [lints.clippy]

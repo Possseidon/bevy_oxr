@@ -51,8 +51,8 @@ impl Plugin for OxrSpatialPlugin {
                     .in_set(OxrSpaceSyncSet)
                     .run_if(openxr_session_running),
             )
-            .observe(add_location_flags)
-            .observe(add_velocity_flags);
+            .add_observer(add_location_flags)
+            .add_observer(add_velocity_flags);
     }
 }
 

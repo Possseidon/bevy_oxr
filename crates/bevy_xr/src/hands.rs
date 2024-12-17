@@ -1,6 +1,6 @@
 use bevy::{
     ecs::{component::Component, entity::Entity, world::Command},
-    hierarchy::BuildWorldChildren,
+    hierarchy::BuildChildren,
     log::{error, warn},
     math::bool,
     prelude::{Bundle, Commands, Deref, DerefMut, Resource, SpatialBundle, With, World},
@@ -205,9 +205,9 @@ impl<B: Bundle> Command for SpawnHandTracker<B> {
             HandSide::Right => tracker.insert(RightHand),
         };
         let tracker = tracker.id();
-        world.entity_mut(root).push_children(&[tracker]);
+        world.entity_mut(root).add_children(&[tracker]);
         executor.0(world, tracker, self.side);
-        if let Some(mut tracker) = world.get_entity_mut(tracker) {
+        if let Ok(mut tracker) = world.get_entity_mut(tracker) {
             tracker.insert(self.side);
             tracker.insert(self.tracker_bundle);
         }

@@ -121,7 +121,7 @@ impl Plugin for XrSessionPlugin {
             .add_systems(
                 XrFirst,
                 exits_session_on_app_exit
-                    .run_if(on_event::<AppExit>())
+                    .run_if(on_event::<AppExit>)
                     .run_if(session_created)
                     .in_set(XrHandleEvents::ExitEvents),
             );
@@ -153,7 +153,7 @@ impl Plugin for XrSessionPlugin {
             XrFirst,
             exits_session_on_app_exit
                 .before(XrHandleEvents::ExitEvents)
-                .run_if(on_event::<AppExit>().and_then(session_running)),
+                .run_if(on_event::<AppExit>.and_then(session_running)),
         );
 
         let render_app = app.sub_app_mut(RenderApp);

@@ -114,19 +114,19 @@ unsafe impl GraphicsExt for openxr::Vulkan {
         let extensions =
             <Vulkan as Api>::Instance::desired_extensions(&vk_entry, VK_TARGET_VERSION_ASH, flags)?;
         let device_extensions = vec![
-            ash::extensions::khr::Swapchain::name(),
-            ash::extensions::khr::DrawIndirectCount::name(),
+            ash::khr::swapchain::NAME,
+            ash::khr::draw_indirect_count::NAME,
             #[cfg(target_os = "android")]
-            ash::extensions::khr::TimelineSemaphore::name(),
-            ash::vk::KhrImagelessFramebufferFn::name(),
-            ash::vk::KhrImageFormatListFn::name(),
+            ash::khr::timeline_semaphore::NAME,
+            ash::khr::imageless_framebuffer::NAME,
+            ash::khr::image_format_list::NAME,
         ];
 
         let vk_instance = unsafe {
             let extensions_cchar: Vec<_> = extensions.iter().map(|s| s.as_ptr()).collect();
 
             let app_name = CString::new(app_info.name.clone().into_owned())?;
-            let vk_app_info = ash::vk::ApplicationInfo::builder()
+            let vk_app_info = ash::vk::ApplicationInfo::default()
                 .application_name(&app_name)
                 .application_version(1)
                 .engine_name(&app_name)
@@ -137,7 +137,7 @@ unsafe impl GraphicsExt for openxr::Vulkan {
                 .create_vulkan_instance(
                     system_id,
                     std::mem::transmute(vk_entry.static_fn().get_instance_proc_addr),
-                    &ash::vk::InstanceCreateInfo::builder()
+                    &ash::vk::InstanceCreateInfo::default()
                         .application_info(&vk_app_info)
                         .enabled_extension_names(&extensions_cchar) as *const _
                         as *const _,
@@ -181,7 +181,7 @@ unsafe impl GraphicsExt for openxr::Vulkan {
                 extensions,
                 flags,
                 false,
-                Some(Box::new(())),
+                Some(Box::new(|| ())),
             )?
         };
 
@@ -205,22 +205,21 @@ unsafe impl GraphicsExt for openxr::Vulkan {
                 .adapter
                 .physical_device_features(&enabled_extensions, wgpu_features);
             let family_index = 0;
-            let family_info = ash::vk::DeviceQueueCreateInfo::builder()
+            let family_info = ash::vk::DeviceQueueCreateInfo::default()
                 .queue_family_index(family_index)
-                .queue_priorities(&[1.0])
-                .build();
+                .queue_priorities(&[1.0]);
             let family_infos = [family_info];
+            let mut physical_device_multiview_features = ash::vk::PhysicalDeviceMultiviewFeatures {
+                multiview: ash::vk::TRUE,
+                ..Default::default()
+            };
             let info = enabled_phd_features
-                .add_to_device_create_builder(
-                    ash::vk::DeviceCreateInfo::builder()
+                .add_to_device_create(
+                    ash::vk::DeviceCreateInfo::default()
                         .queue_create_infos(&family_infos)
-                        .push_next(&mut ash::vk::PhysicalDeviceMultiviewFeatures {
-                            multiview: ash::vk::TRUE,
-                            ..Default::default()
-                        }),
+                        .push_next(&mut physical_device_multiview_features),
                 )
-                .enabled_extension_names(&extensions_cchar)
-                .build();
+                .enabled_extension_names(&extensions_cchar);
             let vk_device = unsafe {
                 let vk_device = instance
                     .create_vulkan_device(
@@ -241,9 +240,10 @@ unsafe impl GraphicsExt for openxr::Vulkan {
             let wgpu_open_device = unsafe {
                 wgpu_exposed_adapter.adapter.device_from_raw(
                     vk_device,
-                    true,
+                    None,
                     &enabled_extensions,
                     wgpu_features,
+                    &wgpu::MemoryHints::default(),
                     family_info.queue_family_index,
                     0,
                 )
@@ -273,6 +273,7 @@ unsafe impl GraphicsExt for openxr::Vulkan {
                         max_push_constant_size: 4,
                         ..Default::default()
                     },
+                    memory_hints: wgpu::MemoryHints::default(),
                 },
                 None,
             )
@@ -379,7 +380,7 @@ fn vulkan_to_wgpu(format: ash::vk::Format) -> Option<wgpu::TextureFormat> {
         F::R8G8B8A8_SINT => Tf::Rgba8Sint,
         F::A2B10G10R10_UINT_PACK32 => Tf::Rgb10a2Uint,
         F::A2B10G10R10_UNORM_PACK32 => Tf::Rgb10a2Unorm,
-        F::B10G11R11_UFLOAT_PACK32 => Tf::Rg11b10Float,
+        F::B10G11R11_UFLOAT_PACK32 => Tf::Rg11b10Ufloat,
         F::R32G32_UINT => Tf::Rg32Uint,
         F::R32G32_SINT => Tf::Rg32Sint,
         F::R32G32_SFLOAT => Tf::Rg32Float,
@@ -630,7 +631,7 @@ fn wgpu_to_vulkan(format: wgpu::TextureFormat) -> Option<ash::vk::Format> {
         Tf::Rgba8Sint => F::R8G8B8A8_SINT,
         Tf::Rgb10a2Uint => F::A2B10G10R10_UINT_PACK32,
         Tf::Rgb10a2Unorm => F::A2B10G10R10_UNORM_PACK32,
-        Tf::Rg11b10Float => F::B10G11R11_UFLOAT_PACK32,
+        Tf::Rg11b10Ufloat => F::B10G11R11_UFLOAT_PACK32,
         Tf::Rg32Uint => F::R32G32_UINT,
         Tf::Rg32Sint => F::R32G32_SINT,
         Tf::Rg32Float => F::R32G32_SFLOAT,
